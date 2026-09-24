@@ -14,6 +14,18 @@ android {
         versionCode = 2
         versionName = "0.2"
     }
+
+    flavorDimensions += "edition"
+    productFlavors {
+        create("full") {
+            dimension = "edition"
+        }
+        create("demo") {
+            dimension = "edition"
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+        }
+    }
 }
 
 
