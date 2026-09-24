@@ -31,6 +31,7 @@ import android.graphics.Canvas;
 import android.widget.Toast;
 import android.speech.tts.TextToSpeech;
 import java.util.Locale;
+import java.util.zip.ZipInputStream;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
@@ -45,15 +46,17 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final int BACKUP_IMPORT_REQUEST = 1002;
+    private static final int DOCUMENT_IMPORT_REQUEST = 1003;
     private final Executor aiExecutor = Executors.newSingleThreadExecutor();
     private TextToSpeech tts;
+    private boolean ttsReady = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         webView = new WebView(this);
         setContentView(webView);
-        tts = new TextToSpeech(this, status -> { if (status == TextToSpeech.SUCCESS) tts.setLanguage(new Locale("es", "MX")); });
+        initTts();
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -80,6 +83,16 @@ public class MainActivity extends Activity {
         webView.loadUrl(demoMode ? "file:///android_asset/index.html?demo=1" : "file:///android_asset/index.html");
 
         // Back is handled through Activity.onBackPressed for consistent WebView behavior.
+    }
+
+    private void initTts() {
+        tts = new TextToSpeech(getApplicationContext(), status -> {
+            ttsReady = status == TextToSpeech.SUCCESS;
+            if (ttsReady) {
+                int result = tts.setLanguage(new Locale("es", "MX"));
+                ttsReady = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED;
+            }
+        });
     }
 
     private void handleAppBack() {
@@ -157,13 +170,28 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface public void speak(String text, float rate) {
             runOnUiThread(() -> {
-                if (tts == null || text == null || text.trim().isEmpty()) return;
+                if (!ttsReady || tts == null) {
+                    Toast.makeText(MainActivity.this, "La voz de Android no está lista. Revisa Texto a voz en Ajustes del teléfono.", Toast.LENGTH_LONG).show();
+                    webView.evaluateJavascript("window.onFaryTtsError&&window.onFaryTtsError()", null);
+                    return;
+                }
+                if (text == null || text.trim().isEmpty()) return;
                 tts.setSpeechRate(Math.max(0.6f, Math.min(rate, 1.6f)));
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "farybooks-reading");
+                int r = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "farybooks-reading");
+                if (r == TextToSpeech.ERROR) Toast.makeText(MainActivity.this, "Android no pudo iniciar la lectura.", Toast.LENGTH_LONG).show();
             });
         }
-        @JavascriptInterface public void stopSpeech() {
-            runOnUiThread(() -> { if (tts != null) tts.stop(); });
+        @JavascriptInterface public void stopSpeech() { runOnUiThread(() -> { if (tts != null) tts.stop(); }); }
+        @JavascriptInterface public boolean isTtsReady() { return ttsReady; }
+
+        @JavascriptInterface public void importDocument() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"text/plain","application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+                startActivityForResult(Intent.createChooser(i, "Importar documento"), DOCUMENT_IMPORT_REQUEST);
+            });
         }
 
         @JavascriptInterface public void exportDocument(String title, String text, String format) {
@@ -269,6 +297,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == DOCUMENT_IMPORT_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                Uri uri=data.getData(); String name="Documento importado"; android.database.Cursor c=getContentResolver().query(uri,null,null,null,null);
+                if(c!=null){int ix=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);if(c.moveToFirst()&&ix>=0)name=c.getString(ix);c.close();}
+                String lower=name.toLowerCase(Locale.ROOT), text;
+                if(lower.endsWith(".docx")) text=readDocxText(uri); else text=readPlainText(uri);
+                final String fn=name, ft=text;
+                webView.evaluateJavascript("window.receiveImportedDocument("+org.json.JSONObject.quote(fn)+","+org.json.JSONObject.quote(ft)+")",null);
+            } catch(Exception e){ Toast.makeText(this,"No se pudo importar el documento.",Toast.LENGTH_LONG).show(); }
+            return;
+        }
         if (requestCode == BACKUP_IMPORT_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try {
                 InputStream in=getContentResolver().openInputStream(data.getData()); ByteArrayOutputStream out=new ByteArrayOutputStream(); byte[] buf=new byte[8192]; int n;
@@ -285,11 +324,18 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        if (tts != null) { tts.stop(); tts.shutdown(); }
-        super.onDestroy();
+    private String readPlainText(Uri uri) throws Exception {
+        InputStream in=getContentResolver().openInputStream(uri); ByteArrayOutputStream out=new ByteArrayOutputStream(); byte[] b=new byte[8192]; int n;
+        while((n=in.read(b))!=-1) out.write(b,0,n); in.close(); return out.toString("UTF-8");
     }
+    private String readDocxText(Uri uri) throws Exception {
+        InputStream in=getContentResolver().openInputStream(uri); ZipInputStream z=new ZipInputStream(in); ZipEntry e; String xml=null;
+        while((e=z.getNextEntry())!=null){if("word/document.xml".equals(e.getName())){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=z.read(b))!=-1)out.write(b,0,n);xml=out.toString("UTF-8");break;}}
+        z.close(); if(xml==null)throw new Exception("DOCX sin documento");
+        xml=xml.replaceAll("</w:p>", "\n\n").replaceAll("<w:tab[^>]*/>", "\t").replaceAll("<w:br[^>]*/>", "\n").replaceAll("<[^>]+>", "");
+        return xml.replace("&amp;","&").replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"").replace("&apos;","'").replaceAll("\n{3,}","\n\n").trim();
+    }
+    @Override protected void onDestroy(){ if(tts!=null){tts.stop();tts.shutdown();} super.onDestroy(); }
 
     @Override
     public void onBackPressed() {
