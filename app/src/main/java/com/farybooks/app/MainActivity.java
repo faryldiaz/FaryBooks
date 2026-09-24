@@ -120,6 +120,33 @@ public class MainActivity extends Activity {
                 else sendAIResult("No pude iniciar FaryAI. Inténtalo nuevamente.", true);
             }
         }
+        @JavascriptInterface public void correct(String request) {
+            if (request == null || request.trim().isEmpty()) return;
+            correctWithModel(request, "gemini-3.8-flash", true);
+        }
+
+        private void correctWithModel(String request, String modelName, boolean allowFallback) {
+            try {
+                GenerativeModel ai = FirebaseAI.getInstance(GenerativeBackend.googleAI()).generativeModel(modelName);
+                GenerativeModelFutures model = GenerativeModelFutures.from(ai);
+                Content prompt = new Content.Builder().addText(request).build();
+                ListenableFuture<GenerateContentResponse> response = model.generateContent(prompt);
+                Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
+                    @Override public void onSuccess(GenerateContentResponse result) {
+                        String value = result.getText();
+                        sendCorrectionResult(value == null ? "{\"corrections\":[]}" : value, false);
+                    }
+                    @Override public void onFailure(Throwable t) {
+                        if (allowFallback) correctWithModel(request, "gemini-3.5-flash", false);
+                        else sendCorrectionResult("{}", true);
+                    }
+                }, aiExecutor);
+            } catch (Throwable t) {
+                if (allowFallback) correctWithModel(request, "gemini-3.5-flash", false);
+                else sendCorrectionResult("{}", true);
+            }
+        }
+
         @JavascriptInterface public void exportDocument(String title, String text, String format) {
             runOnUiThread(() -> {
                 try { if ("pdf".equalsIgnoreCase(format)) savePdf(title, text); else saveDocx(title, text); }
@@ -210,6 +237,10 @@ public class MainActivity extends Activity {
         }
         OutputStream out=createDownload(safeName(title)+".pdf","application/pdf"); doc.writeTo(out); out.close(); doc.close();
         Toast.makeText(this, "PDF guardado en Descargas/FaryBooks ✓", Toast.LENGTH_SHORT).show();
+    }
+
+    private void sendCorrectionResult(String message, boolean error) {
+        runOnUiThread(() -> webView.evaluateJavascript("window.receiveCorrection(" + org.json.JSONObject.quote(message) + "," + error + ")", null));
     }
 
     private void sendAIResult(String message, boolean error) {
