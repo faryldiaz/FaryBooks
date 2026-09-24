@@ -22,11 +22,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient());
         webView.loadUrl("file:///android_asset/index.html");
 
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_OVERLAY, this::handleAppBack
-            );
-        }
+        // Back is handled through Activity.onBackPressed for consistent WebView behavior.
     }
 
     private void handleAppBack() {
@@ -43,6 +39,6 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (android.os.Build.VERSION.SDK_INT < 33) handleAppBack();
+        handleAppBack();
     }
 }
