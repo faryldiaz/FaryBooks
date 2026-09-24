@@ -31,9 +31,12 @@ public class MainActivity extends Activity {
 
     private void handleAppBack() {
         webView.evaluateJavascript(
-            "(function(){if(typeof handleAndroidBack==='function'){return handleAndroidBack()?'handled':'exit'}return 'exit'})()",
+            "typeof handleAndroidBack==='function' ? handleAndroidBack() : false",
             value -> {
-                if ("\"exit\"".equals(value)) finish();
+                // evaluateJavascript returns the JS boolean as the literal string true/false.
+                // Only close Android when the web app explicitly reports that it has
+                // nothing left to navigate back to.
+                if ("false".equals(value) || "null".equals(value)) finish();
             }
         );
     }
