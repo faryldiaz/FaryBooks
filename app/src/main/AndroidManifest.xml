@@ -4,8 +4,6 @@
     <application
         android:allowBackup="true"
         android:label="FaryBooks"
-        android:icon="@drawable/farybooks_launcher"
-        android:roundIcon="@drawable/farybooks_launcher"
         android:theme="@style/AppTheme">
 
         <activity
