@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
             ListenableFuture<GenerateContentResponse> response = model.generateContent(prompt);
             Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
                 @Override public void onSuccess(GenerateContentResponse result) { sendAIResult(result.getText() == null ? "No recibí texto del modelo." : result.getText(), false); }
-                @Override public void onFailure(Throwable t) { String detail = t.getMessage(); if (detail == null || detail.trim().isEmpty()) detail = t.getClass().getSimpleName(); sendAIResult("FaryAI no pudo responder. Detalle: " + detail, true); }
+                @Override public void onFailure(Throwable t) { String detail = t.getMessage(); String lower = detail == null ? "" : detail.toLowerCase(); if (lower.contains("high demand") || lower.contains("unavailable") || lower.contains("resource exhausted") || lower.contains("429") || lower.contains("503")) sendAIResult("Estoy teniendo mucha demanda en este momento. Inténtalo de nuevo en unos instantes ✦", true); else sendAIResult("No pude responder en este momento. Revisa tu conexión e inténtalo nuevamente ✦", true); }
             }, aiExecutor);
         }
     }
