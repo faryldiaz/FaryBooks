@@ -3,7 +3,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="FaryBooks"
+        android:label="${appLabel}"
         android:icon="@drawable/farybooks_icon"
         android:roundIcon="@drawable/farybooks_icon"
         android:theme="@style/AppTheme">
