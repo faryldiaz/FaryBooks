@@ -29,6 +29,9 @@ import android.graphics.pdf.PdfDocument;
 import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.widget.Toast;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import java.util.Locale;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
@@ -44,12 +47,14 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final int BACKUP_IMPORT_REQUEST = 1002;
     private final Executor aiExecutor = Executors.newSingleThreadExecutor();
+    private TextToSpeech tts;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         webView = new WebView(this);
         setContentView(webView);
+        initTts();
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -76,6 +81,21 @@ public class MainActivity extends Activity {
         webView.loadUrl(demoMode ? "file:///android_asset/index.html?demo=1" : "file:///android_asset/index.html");
 
         // Back is handled through Activity.onBackPressed for consistent WebView behavior.
+    }
+
+    private void initTts() {
+        tts = new TextToSpeech(this, status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                tts.setLanguage(new Locale("es", "MX"));
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { }
+                    @Override public void onError(String id) { }
+                    @Override public void onDone(String id) {
+                        runOnUiThread(() -> webView.evaluateJavascript("window.onFarySpeechDone&&window.onFarySpeechDone()", null));
+                    }
+                });
+            }
+        });
     }
 
     private void handleAppBack() {
@@ -149,6 +169,17 @@ public class MainActivity extends Activity {
                 if (allowFallback) correctWithModel(request, "gemini-3.5-flash", false);
                 else sendCorrectionResult("{}", true);
             }
+        }
+
+        @JavascriptInterface public void speak(String text, float rate) {
+            runOnUiThread(() -> {
+                if (tts == null || text == null || text.trim().isEmpty()) return;
+                tts.setSpeechRate(Math.max(0.5f, Math.min(rate, 2.0f)));
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "farybooks-reading");
+            });
+        }
+        @JavascriptInterface public void stopSpeech() {
+            runOnUiThread(() -> { if (tts != null) tts.stop(); });
         }
 
         @JavascriptInterface public void exportDocument(String title, String text, String format) {
@@ -268,6 +299,12 @@ public class MainActivity extends Activity {
             fileCallback.onReceiveValue(result);
             fileCallback = null;
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (tts != null) { tts.stop(); tts.shutdown(); }
+        super.onDestroy();
     }
 
     @Override
