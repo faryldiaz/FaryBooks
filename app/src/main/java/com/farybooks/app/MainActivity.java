@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
 
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleAppBack
+                OnBackInvokedDispatcher.PRIORITY_OVERLAY, this::handleAppBack
             );
         }
     }
