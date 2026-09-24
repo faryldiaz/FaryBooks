@@ -69,7 +69,11 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
-        webView.loadUrl("file:///android_asset/index.html");
+        boolean demoMode = getPackageName().endsWith(".demo");
+        if (demoMode) {
+            webView.evaluateJavascript("window.FARYBOOKS_DEMO=true", null);
+        }
+        webView.loadUrl(demoMode ? "file:///android_asset/index.html?demo=1" : "file:///android_asset/index.html");
 
         // Back is handled through Activity.onBackPressed for consistent WebView behavior.
     }
