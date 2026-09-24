@@ -30,7 +30,6 @@ import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.widget.Toast;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import java.util.Locale;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -54,7 +53,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         webView = new WebView(this);
         setContentView(webView);
-        initTts();
+        tts = new TextToSpeech(this, status -> { if (status == TextToSpeech.SUCCESS) tts.setLanguage(new Locale("es", "MX")); });
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -81,21 +80,6 @@ public class MainActivity extends Activity {
         webView.loadUrl(demoMode ? "file:///android_asset/index.html?demo=1" : "file:///android_asset/index.html");
 
         // Back is handled through Activity.onBackPressed for consistent WebView behavior.
-    }
-
-    private void initTts() {
-        tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(new Locale("es", "MX"));
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) { }
-                    @Override public void onError(String id) { }
-                    @Override public void onDone(String id) {
-                        runOnUiThread(() -> webView.evaluateJavascript("window.onFarySpeechDone&&window.onFarySpeechDone()", null));
-                    }
-                });
-            }
-        });
     }
 
     private void handleAppBack() {
@@ -174,7 +158,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void speak(String text, float rate) {
             runOnUiThread(() -> {
                 if (tts == null || text == null || text.trim().isEmpty()) return;
-                tts.setSpeechRate(Math.max(0.5f, Math.min(rate, 2.0f)));
+                tts.setSpeechRate(Math.max(0.6f, Math.min(rate, 1.6f)));
                 tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "farybooks-reading");
             });
         }
