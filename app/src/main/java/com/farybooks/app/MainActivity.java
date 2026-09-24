@@ -10,11 +10,24 @@ import android.webkit.ValueCallback;
 import android.net.Uri;
 import android.content.Intent;
 import android.window.OnBackInvokedDispatcher;
+import android.webkit.JavascriptInterface;
+import com.google.firebase.ai.FirebaseAI;
+import com.google.firebase.ai.GenerativeModel;
+import com.google.firebase.ai.java.GenerativeModelFutures;
+import com.google.firebase.ai.type.Content;
+import com.google.firebase.ai.type.GenerateContentResponse;
+import com.google.firebase.ai.type.GenerativeBackend;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.ListenableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private final Executor aiExecutor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,6 +38,7 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        webView.addJavascriptInterface(new FaryAIBridge(), "FaryNative");
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -54,6 +68,24 @@ public class MainActivity extends Activity {
                 if ("false".equals(value) || "null".equals(value)) finish();
             }
         );
+    }
+
+    private class FaryAIBridge {
+        @JavascriptInterface public void ask(String request) {
+            if (request == null || request.trim().isEmpty()) return;
+            GenerativeModel ai = FirebaseAI.getInstance(GenerativeBackend.googleAI()).generativeModel("gemini-3.8-flash");
+            GenerativeModelFutures model = GenerativeModelFutures.from(ai);
+            Content prompt = new Content.Builder().addText("Eres FaryAI, asistente de escritura de FaryBooks. Responde en español, respeta la voz e intención de la autora y propón cambios sin afirmar que modificaste el manuscrito. Solicitud: " + request).build();
+            ListenableFuture<GenerateContentResponse> response = model.generateContent(prompt);
+            Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
+                @Override public void onSuccess(GenerateContentResponse result) { sendAIResult(result.getText() == null ? "No recibí texto del modelo." : result.getText(), false); }
+                @Override public void onFailure(Throwable t) { sendAIResult("No pude conectar con FaryAI. Inténtalo nuevamente.", true); }
+            }, aiExecutor);
+        }
+    }
+
+    private void sendAIResult(String message, boolean error) {
+        runOnUiThread(() -> webView.evaluateJavascript("window.receiveFaryAI(" + org.json.JSONObject.quote(message) + "," + error + ")", null));
     }
 
     @Override
