@@ -1,0 +1,17 @@
+{
+  "project_info": {
+    "project_number": "558646251043",
+    "project_id": "farybooks-f06d4",
+    "storage_bucket": "farybooks-f06d4.firebasestorage.app"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "1:558646251043:android:308d29ab5d330a184b6b96",
+      "android_client_info": {"package_name": "com.farybooks.app"}
+    },
+    "oauth_client": [],
+    "api_key": [{"current_key": "AIzaSyDj00UCYGYISgNY_UOPJnC3rseKfP3WRN8"}],
+    "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+  }],
+  "configuration_version": "1"
+}
