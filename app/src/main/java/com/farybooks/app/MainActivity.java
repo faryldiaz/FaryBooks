@@ -89,14 +89,36 @@ public class MainActivity extends Activity {
     private class FaryAIBridge {
         @JavascriptInterface public void ask(String request) {
             if (request == null || request.trim().isEmpty()) return;
-            GenerativeModel ai = FirebaseAI.getInstance(GenerativeBackend.googleAI()).generativeModel("gemini-3.8-flash");
-            GenerativeModelFutures model = GenerativeModelFutures.from(ai);
-            Content prompt = new Content.Builder().addText("Eres FaryAI, asistente de escritura de FaryBooks. Responde en español, respeta la voz e intención de la autora y propón cambios sin afirmar que modificaste el manuscrito. Solicitud: " + request).build();
-            ListenableFuture<GenerateContentResponse> response = model.generateContent(prompt);
-            Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
-                @Override public void onSuccess(GenerateContentResponse result) { sendAIResult(result.getText() == null ? "No recibí texto del modelo." : result.getText(), false); }
-                @Override public void onFailure(Throwable t) { String detail = t.getMessage(); String lower = detail == null ? "" : detail.toLowerCase(); if (lower.contains("high demand") || lower.contains("unavailable") || lower.contains("resource exhausted") || lower.contains("429") || lower.contains("503")) sendAIResult("Estoy teniendo mucha demanda en este momento. Inténtalo de nuevo en unos instantes ✦", true); else sendAIResult("No pude responder en este momento. Revisa tu conexión e inténtalo nuevamente ✦", true); }
-            }, aiExecutor);
+            askModel(request, "gemini-3.8-flash", true);
+        }
+
+        private void askModel(String request, String modelName, boolean allowFallback) {
+            try {
+                GenerativeModel ai = FirebaseAI.getInstance(GenerativeBackend.googleAI()).generativeModel(modelName);
+                GenerativeModelFutures model = GenerativeModelFutures.from(ai);
+                Content prompt = new Content.Builder().addText("Eres FaryAI, asistente de escritura de FaryBooks. Responde en español, respeta la voz e intención de la autora y propón cambios sin afirmar que modificaste el manuscrito. Solicitud: " + request).build();
+                ListenableFuture<GenerateContentResponse> response = model.generateContent(prompt);
+                Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
+                    @Override public void onSuccess(GenerateContentResponse result) {
+                        String value = result.getText();
+                        sendAIResult(value == null || value.trim().isEmpty() ? "FaryAI recibió una respuesta vacía. Inténtalo nuevamente." : value, value == null || value.trim().isEmpty());
+                    }
+                    @Override public void onFailure(Throwable t) {
+                        if (allowFallback) {
+                            askModel(request, "gemini-3.5-flash", false);
+                            return;
+                        }
+                        String detail = t == null ? "" : t.getMessage();
+                        if (detail == null || detail.trim().isEmpty()) detail = t == null ? "Error desconocido" : t.getClass().getSimpleName();
+                        detail = detail.replaceAll("(?i)(api[_ -]?key|key)\\s*[:=]\\s*[^ ,;]+", "$1=[oculto]");
+                        if (detail.length() > 220) detail = detail.substring(0, 220) + "…";
+                        sendAIResult("No pude completar la respuesta. Detalle: " + detail, true);
+                    }
+                }, aiExecutor);
+            } catch (Throwable t) {
+                if (allowFallback) askModel(request, "gemini-3.5-flash", false);
+                else sendAIResult("No pude iniciar FaryAI. Inténtalo nuevamente.", true);
+            }
         }
         @JavascriptInterface public void exportDocument(String title, String text, String format) {
             runOnUiThread(() -> {
